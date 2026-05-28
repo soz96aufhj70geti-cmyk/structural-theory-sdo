@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coupling Graph Explorer</title>
+
+  <style>
+    :root {
+      --bg: #000000;
+      --panel-bg: rgba(5, 5, 5, 0.96);
+      --panel-border: #2a2a2a;
+      --panel-shadow: rgba(23, 190, 207, 0.22);
+      --text: #f5f5f5;
+      --muted: #8a8a8a;
+      --accent: #17becf;
+      --accent-dark: #114466;
+      --gold: #ffd700;
+      --control-bg: #121212;
+      --control-bg-2: #1a1a1a;
+      --scroll-bg: #050505;
+      --danger: #ff6464;
+    }
+
+    body.print-mode {
+      --bg: #ffffff;
+      --panel-bg: rgba(250, 250, 250, 0.97);
+      --panel-border: #c8c8c8;
+      --panel-shadow: rgba(0, 0, 0, 0.12);
+      --text: #111111;
+      --muted: #555555;
+      --accent: #005a6b;
+      --accent-dark: #e8f2f4;
+      --gold: #8a6500;
+      --control-bg: #f3f3f3;
+      --control-bg-2: #eeeeee;
+      --scroll-bg: #f5f5f5;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #graph {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #ui {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      width: 350px;
+      max-height: calc(100vh - 96px);
+      overflow-y: auto;
+      padding: 14px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      box-shadow: 0 0 28px var(--panel-shadow);
+      font-size: 12px;
+      backdrop-filter: blur(6px);
+    }
+
+    #ui::-webkit-scrollbar,
+    .scroll-box::-webkit-scrollbar { width: 7px; }
+    #ui::-webkit-scrollbar-thumb,
+    .scroll-box::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+
+    h3 {
+      margin: 0 0 5px 0;
+      color: var(--accent);
+      font-size: 15px;
+      line-height: 1.2;
+      text-transform: uppercase;
+      letter-spacing: 1.1px;
+    }
+
+    .subline {
+      margin: 0 0 10px 0;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .section-title {
+      display: block;
+      margin: 15px 0 7px 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--panel-border);
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+
+    #info {
+      margin: 8px 0 10px 0;
+      padding: 8px 9px;
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+      background: var(--control-bg);
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.45;
+      white-space: pre-line;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 7px;
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      background: var(--control-bg);
+      color: var(--muted);
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .button-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    .button-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    button.control {
+      min-height: 31px;
+      padding: 7px 6px;
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      background: var(--control-bg-2);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.15px;
+      transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+    }
+    button.control:hover { color: var(--text); background: rgba(127, 127, 127, 0.12); }
+    button.control.active { background: var(--accent-dark); color: var(--accent); border-color: var(--accent); }
+    button.control:disabled, label.disabled { opacity: 0.34; cursor: not-allowed; }
+
+    .badge {
+      float: right;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 700;
+      margin-left: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      min-height: 22px;
+      gap: 9px;
+      padding: 3px 4px;
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+      line-height: 1.25;
+      transition: background 0.16s ease;
+    }
+    label:hover { background: rgba(127, 127, 127, 0.10); }
+    input[type="checkbox"] { margin: 0; accent-color: var(--accent); cursor: pointer; }
+
+    .scroll-box {
+      max-height: 178px;
+      overflow-y: auto;
+      padding: 7px;
+      background: var(--scroll-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+    }
+
+    .small-note {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.35;
+      margin-top: -4px;
+      margin-bottom: 8px;
+    }
+
+    .count {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #progressWrap {
+      width: 100%;
+      height: 8px;
+      margin: 8px 0 6px 0;
+      border: 1px solid var(--panel-border);
+      border-radius: 999px;
+      background: var(--control-bg);
+      overflow: hidden;
+    }
+    #progressBar { width: 0%; height: 100%; background: var(--accent); transition: width 0.18s ease; }
+    #progressText { margin-bottom: 8px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+
+    #cameraRail {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 12;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      box-shadow: 0 0 24px var(--panel-shadow);
+      backdrop-filter: blur(6px);
+      overflow-x: auto;
+    }
+
+    #cameraRail .rail-title {
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      margin: 0 8px 0 4px;
+      white-space: nowrap;
+    }
+
+    #cameraRail button.control {
+      min-width: 82px;
+      white-space: nowrap;
+    }
+
+    #tourState {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+  </style>
+
+  <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three-spritetext@1.8.1/dist/three-spritetext.min.js"></script>
+  <script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
+</head>
+<body>
+  <div id="ui">
+    <h3>Coupling Graph</h3>
+    <div class="subline">Operator Geometry Explorer</div>
+
+    <input type="file" id="fileInput" accept=".json" />
+    <div id="info">Loading coupling_graph_data.json...</div>
+    <div id="progressWrap"><div id="progressBar"></div></div>
+    <div id="progressText">0%</div>
+
+    <span class="section-title">Geometry</span>
+    <div class="button-grid" id="geometryButtons">
+      <button class="control active" data-geometry="primary">Primary</button>
+      <button class="control" data-geometry="stored">JSON xyz</button>
+      <button class="control" data-geometry="core_full">Core full</button>
+      <button class="control" data-geometry="core_backbone_plus_async_early_backbone">Core + async</button>
+    </div>
+
+    <span class="section-title">View</span>
+    <div class="button-grid three" id="viewButtons">
+      <button class="control active" data-view="all">All</button>
+      <button class="control" data-view="self">Self</button>
+      <button class="control" data-view="real">Real</button>
+      <button class="control" data-view="virtual">Virtual</button>
+      <button class="control" data-view="open">Open</button>
+      <button class="control" data-view="core_active">Core active</button>
+      <button class="control" data-view="async_active">Async active</button>
+      <button class="control" data-view="field">Field-like</button>
+      <button class="control" data-view="boundary">Boundary</button>
+    </div>
+
+    <span class="section-title">Color</span>
+    <div class="button-grid" id="colorButtons">
+      <button class="control active" data-color="family">Family</button>
+      <button class="control" data-color="mode">U/K mode</button>
+      <button class="control" data-color="status">Status</button>
+      <button class="control" data-color="saturation">3-position</button>
+      <button class="control" data-color="pairsat">Pair 3-position</button>
+      <button class="control" data-color="matrix">Matrix cell</button>
+      <button class="control" data-color="scc">Core SCC</button>
+      <button class="control" data-color="strength">Coupling strength</button>
+      <button class="control" data-color="coredegree">Core degree</button>
+    </div>
+
+    <span class="section-title">Edges</span>
+    <div class="button-grid" id="edgeButtons">
+      <button class="control active" data-edge="none">No edges</button>
+      <button class="control" data-edge="core">Core</button>
+      <button class="control" data-edge="async">Async</button>
+      <button class="control" data-edge="both">Both</button>
+    </div>
+
+    <span class="section-title">Labels</span>
+    <div class="button-grid three" id="labelButtons">
+      <button class="control" data-label="none">Off</button>
+      <button class="control active" data-label="click">Click</button>
+      <button class="control" data-label="self">Self</button>
+      <button class="control" data-label="family">Families</button>
+      <button class="control" data-label="boundary">Boundary</button>
+      <button class="control" data-label="status">Status</button>
+    </div>
+
+    <span class="section-title">Pair status</span>
+    <div id="statusFilters" class="filter-group"></div>
+
+    <span class="section-title">Projection families</span>
+    <div id="familyFilters" class="scroll-box filter-group"></div>
+
+    <span class="section-title">U/K modes</span>
+    <div id="modeFilters" class="scroll-box filter-group"></div>
+
+    <span class="section-title">3-position</span>
+    <div id="saturationFilters" class="filter-group"></div>
+
+    <span class="section-title">Pair 3-position</span>
+    <div id="pairSaturationFilters" class="filter-group"></div>
+
+    <div class="small-note">Buttons with no distinct data are disabled or marked by zero counts. Geometry modes require matching coordinates in the JSON payload.</div>
+  </div>
+
+  <div id="cameraRail">
+    <span class="rail-title">Camera</span>
+    <button class="control active" id="camOrbit" data-keep-tour="true">Auto orbit</button>
+    <button class="control" id="camFly" data-keep-tour="true">Fly-through</button>
+    <button class="control" id="camStop" data-keep-tour="true">Stop</button>
+    <button class="control" id="camFit">Fit</button>
+    <button class="control" id="camFront">Front</button>
+    <button class="control" id="camSide">Side</button>
+    <button class="control" id="camDiag">Diagonal</button>
+    <button class="control" id="printBtn">Print mode</button>
+    <span id="tourState">Idle tour starts after data load</span>
+  </div>
+
+  <div id="graph"></div>
+
+<script>
+const DEFAULT_DATA_CANDIDATES = [
+  new URLSearchParams(location.search).get("data"),
+  "coupling_graph_data.json",
+  "./coupling_graph_data.json",
+  "data/coupling_graph_data.json"
+].filter(Boolean);
+
+const colorsNormal = {
+  bg: "#000000",
+  nodeNeutral: "rgba(150,150,150,0.35)",
+  edge: "rgba(210,210,210,0.32)",
+  label: "#ffd700",
+  selected: "#ffffff",
+  saturation: { internal: "#ffd700", left: "#9467bd", right: "#17becf", mixed: "#ff8c00" }
+};
+const colorsPrint = {
+  bg: "#ffffff",
+  nodeNeutral: "rgba(20,20,20,0.64)",
+  edge: "rgba(40,40,40,0.30)",
+  label: "#000000",
+  selected: "#cc0000",
+  saturation: { internal: "#b8860b", left: "#4b0082", right: "#008b8b", mixed: "#b45f06" }
+};
+
+const modeColors = {
+  "U0_K0": "#17becf", "U1_K0": "#66c2a5", "U0_K1": "#8da0cb", "U0_K2": "#5e4fa2",
+  "U1_K1": "#ffd700", "U1_K2": "#fdae61", "U2_K1": "#f46d43", "U2_K2": "#d73027", "U2_K0": "#ff4444"
+};
+const familyColors = {
+  photon: "#17becf", neutrino: "#66c2a5", vacuum: "#80ffaa", e_role: "#ffd700",
+  s_role: "#fdae61", virtual_edge: "#9467bd", coupling: "#8da0cb", condensation: "#d73027", basis: "rgba(150,150,150,0.35)"
+};
+const statusColors = {
+  real: "#ffd700", virtual: "#17becf", open: "#9467bd", not_self: "rgba(150,150,150,0.35)"
+};
+const pairSatColors = { II: "#ffd700", IL: "#8da0cb", IR: "#17becf", LL: "#9467bd", RR: "#008b8b", LR: "#ff8c00", unknown: "#888888" };
+const matrixColors = { virtual_distant: "#595959", virtual_supported: "#9467bd", mediated_real: "#17becf", intrinsic_real: "#ffd700", unknown: "#888888" };
+
+const pairSatCodeLabel = { 0: "II", 1: "IL", 2: "IR", 3: "LL", 4: "RR", 5: "LR", "-1": "unknown" };
+const matrixCellLabel = { 0: "virtual_distant", 1: "virtual_supported", 2: "mediated_real", 3: "intrinsic_real" };
+
+const familyOrder = ["photon", "neutrino", "vacuum", "e_role", "s_role", "virtual_edge", "coupling", "condensation"];
+const familyDefinitions = [
+  { key: "photon", label: "Photonic field forms", compacts: new Set(["121|3|212", "212|3|121"]) },
+  { key: "neutrino", label: "Neutrino-like boundary forms", compacts: new Set(["112|3|212", "212|3|112"]) },
+  { key: "vacuum", label: "Vacuum response", compacts: new Set(["12121|3|2", "1|3|21212", "21212|3|1", "2|3|12121"]) },
+  { key: "e_role", label: "E roles", compacts: new Set(["1212|3|12", "12|3|1212", "2121|3|21", "21|3|2121"]) },
+  { key: "s_role", label: "S roles", compacts: new Set(["1212|3|21", "12|3|2121", "2121|3|12", "21|3|1212"]) },
+  { key: "virtual_edge", label: "Virtual field-edge modes", compacts: new Set(["212121|3|", "121212|3|", "|3|121212", "|3|212121"]) }
+];
+const fieldFamilies = new Set(["photon", "neutrino", "vacuum", "e_role", "s_role", "virtual_edge"]);
+const modeDefinitions = [
+  ["U0_K0", "U0 K0 · null-binding / field-like"],
+  ["U1_K0", "U1 K0 · response mode"],
+  ["U0_K1", "U0 K1 · coupling mode"],
+  ["U0_K2", "U0 K2 · multi-coupling"],
+  ["U1_K1", "U1 K1 · simple condensation"],
+  ["U1_K2", "U1 K2 · bound condensation"],
+  ["U2_K1", "U2 K1 · interaction body"],
+  ["U2_K2", "U2 K2 · global-local tension"],
+  ["U2_K0", "U2 K0 · non-coexistence"]
+];
+
+let rawData = null, paths = [], graphNodes = [], graphLinks = [];
+let viewMode = "all", colorMode = "family", edgeMode = "none", labelMode = "click", geometryMode = "primary";
+let clickedNode = null, isPrint = false;
+let availableGeometries = new Set(["primary", "stored"]);
+const activeStatus = new Set(), activeFamilies = new Set(), activeModes = new Set(), activeSaturation = new Set(), activePairSaturation = new Set();
+
+let userInteracted = false;
+let tourMode = "orbit";
+let tourRaf = null;
+let tourStart = 0;
+let lastCameraUpdate = 0;
+let tourCenter = { x: 0, y: 0, z: 0 };
+let tourRadius = 1800;
+
+const infoElement = document.getElementById("info");
+const progressBar = document.getElementById("progressBar");
+const progressText = document.getElementById("progressText");
+const tourState = document.getElementById("tourState");
+
+function currentColors() { return isPrint ? colorsPrint : colorsNormal; }
+function setProgress(percent, text = "") {
+  const value = Math.max(0, Math.min(100, Math.round(percent)));
+  progressBar.style.width = `${value}%`;
+  progressText.textContent = text ? `${value}% · ${text}` : `${value}%`;
+}
+function logInfo(text) { infoElement.textContent = text; }
+
+if (typeof THREE === "undefined" || typeof SpriteText === "undefined" || typeof ForceGraph3D === "undefined") {
+  throw new Error("A required 3D library could not be loaded.");
+}
+
+const Graph = ForceGraph3D()(document.getElementById("graph"))
+  .backgroundColor(colorsNormal.bg)
+  .nodeRelSize(5)
+  .nodeOpacity(1)
+  .linkOpacity(0.32)
+  .linkColor(() => currentColors().edge)
+  .nodeColor(node => getNodeColor(node))
+  .nodeVal(node => getNodeValue(node))
+  .nodeThreeObjectExtend(true)
+  .nodeThreeObject(node => getNodeLabelObject(node));
+Graph.cooldownTicks(0).enableNodeDrag(false);
+
+function statusLabel(code) {
+  if (code === 2) return "real";
+  if (code === 1) return "virtual";
+  if (code === 0) return "open";
+  return "not_self";
+}
+function statusText(code) {
+  if (code === 2) return "real / self-sustaining";
+  if (code === 1) return "virtual / async-supported";
+  if (code === 0) return "open / not connected";
+  return "non-self pair";
+}
+function saturationLabel(code) {
+  if (Number(code) === 0) return "internal_3";
+  if (Number(code) === 1) return "left_boundary_3";
+  if (Number(code) === 2) return "right_boundary_3";
+  return "unknown";
+}
+function pairSaturationClass(pathA, pathB) {
+  const a = Number(pathA?.sp), b = Number(pathB?.sp);
+  if (a === 0 && b === 0) return "II";
+  if (a === 1 && b === 1) return "LL";
+  if (a === 2 && b === 2) return "RR";
+  if ((a === 0 && b === 1) || (a === 1 && b === 0)) return "IL";
+  if ((a === 0 && b === 2) || (a === 2 && b === 0)) return "IR";
+  if ((a === 1 && b === 2) || (a === 2 && b === 1)) return "LR";
+  return "unknown";
+}
+function pathMode(path) { return path?.uk || "U0_K0"; }
+function endpointId(value) { return value && typeof value === "object" ? Number(value.id ?? value.n) : Number(value); }
+function pathFamilies(path) {
+  const result = [];
+  const compact = path?.c || "";
+  familyDefinitions.forEach(def => { if (def.compacts.has(compact)) result.push(def.key); });
+  const [uPart, kPart] = pathMode(path).split("_");
+  const u = Number((uPart || "U0").replace("U", ""));
+  const k = Number((kPart || "K0").replace("K", ""));
+  if (u === 0 && k > 0) result.push("coupling");
+  if (u > 0 && k > 0) result.push("condensation");
+  return result;
+}
+function familyLabel(key) {
+  const found = familyDefinitions.find(def => def.key === key);
+  if (found) return found.label;
+  if (key === "coupling") return "Coupling modes";
+  if (key === "condensation") return "Condensation modes";
+  return key;
+}
+function isFieldPath(path) { return pathFamilies(path).some(family => fieldFamilies.has(family)); }
+function getDiagnosticLayouts(data) { return data?.s?.paper_metrics?.layout_diagnostics || data?.s?.layout_diagnostics || {}; }
+
+function detectAvailableGeometries(data) {
+  availableGeometries = new Set(["primary", "stored"]);
+  Object.entries(getDiagnosticLayouts(data)).forEach(([mode, diag]) => {
+    if (Array.isArray(diag?.coords)) availableGeometries.add(mode);
+  });
+}
+function applyGeometry(mode) {
+  if (!rawData) return;
+  const diagnostics = getDiagnosticLayouts(rawData);
+  let coords = null;
+  if (mode !== "primary" && mode !== "stored") coords = diagnostics?.[mode]?.coords || null;
+  graphNodes.forEach(node => {
+    let x = node.storedX, y = node.storedY, z = node.storedZ;
+    if (coords && coords[node.n]) {
+      x = Number(coords[node.n][0]); y = Number(coords[node.n][1]); z = Number(coords[node.n][2]);
+    }
+    node.x = x; node.y = y; node.z = z; node.fx = x; node.fy = y; node.fz = z;
+  });
+  computeTourBounds();
+}
+function normalizeData(data) {
+  rawData = data;
+  paths = data.paths || [];
+  detectAvailableGeometries(data);
+  graphNodes = (data.nodes || []).map(node => {
+    const pathA = paths[node.a], pathB = paths[node.b];
+    const families = new Set([...pathFamilies(pathA), ...pathFamilies(pathB)]);
+    const modes = new Set([pathMode(pathA), pathMode(pathB)]);
+    const saturations = new Set([saturationLabel(pathA?.sp), saturationLabel(pathB?.sp)]);
+    const pairSat = pairSatCodeLabel[String(node.psc)] || pairSaturationClass(pathA, pathB);
+    const x = Number.isFinite(Number(node.x)) ? Number(node.x) : 0;
+    const y = Number.isFinite(Number(node.y)) ? Number(node.y) : 0;
+    const z = Number.isFinite(Number(node.z)) ? Number(node.z) : 0;
+    const co = Number(node.co || 0), ci = Number(node.ci || 0), ao = Number(node.ao || 0), ai = Number(node.ai || 0);
+    const cwo = Number(node.cwo || 0), cwi = Number(node.cwi || 0), awo = Number(node.awo || 0), awi = Number(node.awi || 0);
+    const hasLeft = saturations.has("left_boundary_3"), hasRight = saturations.has("right_boundary_3");
+    const satCategory = hasLeft && hasRight ? "mixed" : hasLeft ? "left" : hasRight ? "right" : "internal";
+    return {
+      id: Number(node.n), n: Number(node.n), aIndex: Number(node.a), bIndex: Number(node.b), pathA, pathB,
+      self: Number(node.s) === 1,
+      pairStatusCode: Number(node.ps), selfStatusCode: Number(node.ss),
+      pairStatus: statusLabel(Number(node.ps)), selfStatus: statusLabel(Number(node.ss)),
+      coreSccId: Number(node.cs), asyncSccId: Number(node.as),
+      storedX: x, storedY: y, storedZ: z, x, y, z, fx: x, fy: y, fz: z,
+      co, ci, ao, ai, cwo, cwi, awo, awi,
+      coreActive: co + ci + cwo + cwi > 0,
+      asyncActive: ao + ai + awo + awi > 0,
+      families, modes, saturations,
+      field: isFieldPath(pathA) || isFieldPath(pathB),
+      boundary: Number(pathA?.sp) !== 0 || Number(pathB?.sp) !== 0,
+      compactA: pathA?.c || "", compactB: pathB?.c || "",
+      modeA: pathMode(pathA), modeB: pathMode(pathB),
+      pairSat, satCategory,
+      matrixCellCode: Number(node.mc ?? -1),
+      matrixCell: matrixCellLabel[Number(node.mc)] || "unknown",
+      pairSaturationCode: Number(node.psc ?? -1),
+      passabilityWeight: Number(node.pw || 0)
+    };
+  });
+  graphLinks = (data.edges || []).map(edge => ({
+    source: Number(edge.s), target: Number(edge.t),
+    cm: Number(edge.cm || 0), cw: Number(edge.cw || 0), ct: Number(edge.ct || 0),
+    am: Number(edge.am || 0), aw: Number(edge.aw || 0), at: Number(edge.at || 0),
+    isCore: Number(edge.cm || 0) > 0, isAsync: Number(edge.am || 0) > 0
+  }));
+}
+
+function passesView(node) {
+  if (viewMode === "all") return true;
+  if (viewMode === "self") return node.self;
+  if (viewMode === "real") return node.pairStatus === "real" || node.selfStatus === "real";
+  if (viewMode === "virtual") return node.pairStatus === "virtual" || node.selfStatus === "virtual";
+  if (viewMode === "open") return node.pairStatus === "open";
+  if (viewMode === "core_active") return node.coreActive;
+  if (viewMode === "async_active") return node.asyncActive;
+  if (viewMode === "field") return node.field;
+  if (viewMode === "boundary") return node.boundary;
+  return true;
+}
+function passesManualFilters(node) {
+  if (activeStatus.size > 0 && !activeStatus.has(node.pairStatus)) return false;
+  if (activeFamilies.size > 0 && ![...node.families].some(f => activeFamilies.has(f))) return false;
+  if (activeModes.size > 0 && ![...node.modes].some(m => activeModes.has(m))) return false;
+  if (activeSaturation.size > 0 && ![...node.saturations].some(s => activeSaturation.has(s))) return false;
+  if (activePairSaturation.size > 0 && !activePairSaturation.has(node.pairSat)) return false;
+  return true;
+}
+function passesNode(node) { return passesView(node) && passesManualFilters(node); }
+function filteredGraph() {
+  const nodes = graphNodes.filter(passesNode);
+  const ids = new Set(nodes.map(node => node.id));
+  let links = [];
+  if (edgeMode !== "none") {
+    links = graphLinks.filter(link => {
+      const sourceId = endpointId(link.source), targetId = endpointId(link.target);
+      if (!ids.has(sourceId) || !ids.has(targetId)) return false;
+      if (edgeMode === "core") return link.isCore;
+      if (edgeMode === "async") return link.isAsync;
+      if (edgeMode === "both") return link.isCore || link.isAsync;
+      return false;
+    });
+  }
+  return { nodes, links };
+}
+
+function getNodeColor(node) {
+  const set = currentColors();
+  if (node === clickedNode) return set.selected;
+  if (colorMode === "family") {
+    for (const family of familyOrder) if (node.families.has(family)) return familyColors[family];
+    return set.nodeNeutral;
+  }
+  if (colorMode === "mode") return node.self ? (modeColors[node.modeA] || set.nodeNeutral) : (modeColors[[...node.modes][0]] || set.nodeNeutral);
+  if (colorMode === "status") return statusColors[node.pairStatus] || set.nodeNeutral;
+  if (colorMode === "saturation") return set.saturation[node.satCategory] || set.nodeNeutral;
+  if (colorMode === "pairsat") return pairSatColors[node.pairSat] || set.nodeNeutral;
+  if (colorMode === "matrix") return matrixColors[node.matrixCell] || set.nodeNeutral;
+  if (colorMode === "scc") {
+    const id = Math.max(0, node.coreSccId);
+    const hue = (id * 47) % 360;
+    return isPrint ? `hsl(${hue},48%,38%)` : `hsl(${hue},82%,62%)`;
+  }
+  if (colorMode === "strength") {
+    const strength = Math.log1p(node.cwo + node.cwi + node.awo + node.awi);
+    const light = Math.max(25, Math.min(75, 25 + strength * 6));
+    return isPrint ? `hsl(190,30%,${Math.max(20, light - 20)}%)` : `hsl(190,85%,${light}%)`;
+  }
+  if (colorMode === "coredegree") {
+    const degree = Math.log1p(node.co + node.ci);
+    const light = Math.max(25, Math.min(75, 25 + degree * 10));
+    return isPrint ? `hsl(32,40%,${Math.max(22, light - 15)}%)` : `hsl(32,90%,${light}%)`;
+  }
+  return set.nodeNeutral;
+}
+function getNodeValue(node) {
+  const degree = Math.log1p(node.co + node.ci + node.ao + node.ai);
+  if (node.self) return 17 + degree;
+  if (node.field) return 6.2;
+  if (node.boundary) return 5.2;
+  return 3.7;
+}
+function shouldShowLabel(node) {
+  if (labelMode === "none") return false;
+  if (labelMode === "click") return node === clickedNode;
+  if (labelMode === "self") return node.self;
+  if (labelMode === "family") return node.self && node.families.size > 0;
+  if (labelMode === "boundary") return node.self && node.boundary;
+  if (labelMode === "status") return node.self;
+  return false;
+}
+function labelText(node) {
+  if (labelMode === "status") return `${node.compactA}\n${statusText(node.selfStatusCode)}`;
+  if (labelMode === "family") return `${node.compactA}\n${[...node.families].map(familyLabel).join(" / ")}`;
+  if (node.self) return `${node.compactA}`;
+  return `${node.compactA} | ${node.compactB}`;
+}
+function getNodeLabelObject(node) {
+  if (!shouldShowLabel(node)) return null;
+  const group = new THREE.Group();
+  const sprite = new SpriteText(labelText(node));
+  sprite.color = currentColors().label;
+  sprite.textHeight = node === clickedNode ? 15 : (node.self ? 10 : 8);
+  sprite.backgroundColor = isPrint ? "rgba(255,255,255,0.82)" : "rgba(0,0,0,0.64)";
+  sprite.padding = 5;
+  sprite.material.depthTest = false;
+  sprite.renderOrder = 999;
+  sprite.position.set(0, getNodeValue(node) + 10, 0);
+  group.add(sprite);
+  return group;
+}
+
+function updateGraph() {
+  if (!rawData) return;
+  applyGeometry(geometryMode);
+  Graph.graphData(filteredGraph());
+  refreshGraphStyle();
+}
+function refreshGraphStyle() {
+  Graph.backgroundColor(currentColors().bg)
+    .linkColor(() => currentColors().edge)
+    .nodeColor(node => getNodeColor(node))
+    .nodeVal(node => getNodeValue(node))
+    .nodeThreeObject(node => getNodeLabelObject(node));
+  updateInfo();
+}
+function updateInfo() {
+  if (!rawData) { logInfo("No data loaded."); return; }
+  const data = Graph.graphData();
+  const meta = rawData.m || {}, summary = rawData.s || {}, metrics = summary.paper_metrics || {};
+  const primary = meta.primary_layout_mode || meta.layout?.primary_mode || meta.layout?.mode || "stored";
+  const layout = geometryMode === "primary" ? primary : geometryMode;
+  const coreEdges = metrics.core_edge_count ?? summary.internal_core_edge_count ?? graphLinks.filter(e => e.isCore).length;
+  const asyncEdges = metrics.async_edge_count ?? summary.internal_async_edge_count ?? graphLinks.filter(e => e.isAsync).length;
+  logInfo(`${data.nodes.length}/${graphNodes.length} nodes | ${data.links.length} visible edges | layout: ${layout}\nCORE ${coreEdges} | ASYNC ${asyncEdges} | view: ${viewMode} | color: ${colorMode}`);
+}
+
+function setButtonGroup(containerId, value, attrName) {
+  document.querySelectorAll(`#${containerId} button`).forEach(button => button.classList.toggle("active", button.dataset[attrName] === value));
+}
+function setView(value) { stopTourByUser(); viewMode = value; setButtonGroup("viewButtons", value, "view"); updateGraph(); }
+function setColor(value) { stopTourByUser(); colorMode = value; setButtonGroup("colorButtons", value, "color"); refreshGraphStyle(); }
+function setEdge(value) { stopTourByUser(); edgeMode = value; setButtonGroup("edgeButtons", value, "edge"); updateGraph(); }
+function setLabel(value) { stopTourByUser(); labelMode = value; setButtonGroup("labelButtons", value, "label"); refreshGraphStyle(); }
+function setGeometry(value) {
+  if (value !== "primary" && value !== "stored" && !availableGeometries.has(value)) return;
+  stopTourByUser(); geometryMode = value; setButtonGroup("geometryButtons", value, "geometry"); updateGraph();
+}
+
+function buttonLabelWithCount(button, count) {
+  const base = button.dataset.baseLabel || button.textContent.replace(/\s+\d+$/, "").trim();
+  button.dataset.baseLabel = base;
+  button.innerHTML = `${base} <span class="badge">${count}</span>`;
+}
+function updateControlAvailability() {
+  if (!rawData) return;
+  const viewPredicates = {
+    all: n => true,
+    self: n => n.self,
+    real: n => n.pairStatus === "real" || n.selfStatus === "real",
+    virtual: n => n.pairStatus === "virtual" || n.selfStatus === "virtual",
+    open: n => n.pairStatus === "open",
+    core_active: n => n.coreActive,
+    async_active: n => n.asyncActive,
+    field: n => n.field,
+    boundary: n => n.boundary
+  };
+  document.querySelectorAll("#viewButtons button").forEach(button => {
+    const count = graphNodes.filter(viewPredicates[button.dataset.view] || (() => true)).length;
+    button.disabled = count === 0;
+    button.title = count === 0 ? "No nodes for this view in the current JSON." : `${count} nodes`;
+    buttonLabelWithCount(button, count);
+  });
+  const coreCount = graphLinks.filter(e => e.isCore).length;
+  const asyncCount = graphLinks.filter(e => e.isAsync).length;
+  const edgeCounts = { none: 0, core: coreCount, async: asyncCount, both: coreCount + asyncCount };
+  document.querySelectorAll("#edgeButtons button").forEach(button => {
+    const mode = button.dataset.edge;
+    button.disabled = mode !== "none" && edgeCounts[mode] === 0;
+    button.title = mode !== "none" && edgeCounts[mode] === 0 ? "No such edge layer in the current JSON." : `${edgeCounts[mode]} edges`;
+    buttonLabelWithCount(button, edgeCounts[mode]);
+  });
+  document.querySelectorAll("#geometryButtons button").forEach(button => {
+    const mode = button.dataset.geometry;
+    const hasGeometry = mode === "primary" || mode === "stored" || availableGeometries.has(mode);
+    button.disabled = !hasGeometry;
+    button.title = hasGeometry ? "Available" : "This layout is not included in the current JSON export.";
+  });
+}
+
+function buildDynamicUI() {
+  buildStatusFilters(); buildFamilyFilters(); buildModeFilters(); buildSaturationFilters(); buildPairSaturationFilters(); updateControlAvailability();
+}
+function countBy(nodes, getter) {
+  const result = new Map();
+  nodes.forEach(node => getter(node).forEach(value => result.set(value, (result.get(value) || 0) + 1)));
+  return result;
+}
+function makeCheckboxLabel(value, text, targetSet, count) {
+  const label = document.createElement("label");
+  if (count === 0) label.classList.add("disabled");
+  const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.value = value; checkbox.disabled = count === 0;
+  checkbox.onchange = () => { stopTourByUser(); checkbox.checked ? targetSet.add(value) : targetSet.delete(value); updateGraph(); };
+  const span = document.createElement("span"); span.textContent = text;
+  const countSpan = document.createElement("span"); countSpan.className = "count"; countSpan.textContent = count;
+  label.appendChild(checkbox); label.appendChild(span); label.appendChild(countSpan);
+  return label;
+}
+function buildStatusFilters() {
+  const container = document.getElementById("statusFilters"); container.innerHTML = ""; activeStatus.clear();
+  const counts = countBy(graphNodes, n => [n.pairStatus]);
+  [["real", "real / self-sustaining"], ["virtual", "virtual / async-supported"], ["open", "open / not connected"]]
+    .forEach(([value, text]) => container.appendChild(makeCheckboxLabel(value, text, activeStatus, counts.get(value) || 0)));
+}
+function buildFamilyFilters() {
+  const container = document.getElementById("familyFilters"); container.innerHTML = ""; activeFamilies.clear();
+  const counts = countBy(graphNodes, n => [...n.families]);
+  [...familyDefinitions.map(def => [def.key, def.label]), ["coupling", "Coupling modes"], ["condensation", "Condensation modes"]]
+    .forEach(([value, text]) => container.appendChild(makeCheckboxLabel(value, text, activeFamilies, counts.get(value) || 0)));
+}
+function buildModeFilters() {
+  const container = document.getElementById("modeFilters"); container.innerHTML = ""; activeModes.clear();
+  const counts = countBy(graphNodes, n => [...n.modes]);
+  modeDefinitions.forEach(([value, text]) => container.appendChild(makeCheckboxLabel(value, text, activeModes, counts.get(value) || 0)));
+}
+function buildSaturationFilters() {
+  const container = document.getElementById("saturationFilters"); container.innerHTML = ""; activeSaturation.clear();
+  const counts = countBy(graphNodes, n => [...n.saturations]);
+  [["internal_3", "internal 3-position"], ["left_boundary_3", "left boundary 3"], ["right_boundary_3", "right boundary 3"]]
+    .forEach(([value, text]) => container.appendChild(makeCheckboxLabel(value, text, activeSaturation, counts.get(value) || 0)));
+}
+function buildPairSaturationFilters() {
+  const container = document.getElementById("pairSaturationFilters"); container.innerHTML = ""; activePairSaturation.clear();
+  const counts = countBy(graphNodes, n => [n.pairSat]);
+  [["II", "II · both internal"], ["IL", "IL · internal / left"], ["IR", "IR · internal / right"], ["LL", "LL · both left"], ["RR", "RR · both right"], ["LR", "LR · left / right"]]
+    .forEach(([value, text]) => container.appendChild(makeCheckboxLabel(value, text, activePairSaturation, counts.get(value) || 0)));
+}
+
+function validatePayload(data) {
+  if (!data || typeof data !== "object") throw new Error("JSON is not an object.");
+  if (!Array.isArray(data.paths)) throw new Error("Missing paths array.");
+  if (!Array.isArray(data.nodes)) throw new Error("Missing nodes array.");
+  if (!Array.isArray(data.edges)) throw new Error("Missing edges array.");
+  if (data.paths.length === 0) throw new Error("paths array is empty.");
+  if (data.nodes.length === 0) throw new Error("nodes array is empty.");
+  const required = ["n", "a", "b", "x", "y", "z"];
+  for (const field of required) if (!(field in data.nodes[0])) throw new Error(`Node field missing: ${field}`);
+}
+async function processLoadedData(data, sourceLabel) {
+  setProgress(45, "validating"); validatePayload(data);
+  setProgress(60, "normalizing"); normalizeData(data);
+  setProgress(75, "building controls"); buildDynamicUI();
+  setProgress(85, "rendering graph"); updateGraph();
+  setProgress(95, "camera fit");
+  setTimeout(() => { Graph.zoomToFit(800, 45); setProgress(100, `loaded: ${sourceLabel}`); startTour("orbit", false); }, 250);
+}
+async function loadDefaultData() {
+  if (location.protocol === "file:") {
+    setProgress(0, "manual JSON required");
+    logInfo("Automatic loading is blocked from file://. Use GitHub Pages or run: python -m http.server 8000");
+    return;
+  }
+  const errors = [];
+  for (const candidate of DEFAULT_DATA_CANDIDATES) {
+    try {
+      setProgress(10, `fetching ${candidate}`);
+      const response = await fetch(candidate, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setProgress(35, "parsing JSON");
+      const parsed = await response.json();
+      await processLoadedData(parsed, candidate);
+      return;
+    } catch (error) { errors.push(`${candidate}: ${error.message}`); }
+  }
+  setProgress(0, "manual JSON required");
+  logInfo(`Could not autoload coupling graph data.\nTried:\n${errors.join("\n")}\n\nPlace coupling_graph_data.json next to this HTML file or load a JSON manually.`);
+}
+
+function computeTourBounds() {
+  if (!graphNodes.length) { tourCenter = { x: 0, y: 0, z: 0 }; tourRadius = 1800; return; }
+  const xs = graphNodes.map(n => Number(n.x) || 0), ys = graphNodes.map(n => Number(n.y) || 0), zs = graphNodes.map(n => Number(n.z) || 0);
+  tourCenter = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2, z: (Math.min(...zs) + Math.max(...zs)) / 2 };
+  const maxRadius = Math.max(...graphNodes.map(n => Math.hypot((n.x || 0) - tourCenter.x, (n.y || 0) - tourCenter.y, (n.z || 0) - tourCenter.z)), 500);
+  tourRadius = Math.max(900, Math.min(5200, maxRadius * 1.75));
+}
+function setTourButtons(active) {
+  document.querySelectorAll("#cameraRail button").forEach(b => b.classList.remove("active"));
+  if (active === "orbit") document.getElementById("camOrbit").classList.add("active");
+  if (active === "fly") document.getElementById("camFly").classList.add("active");
+}
+function startTour(mode = "orbit", explicit = true) {
+  if (!rawData) return;
+  if (explicit) userInteracted = false;
+  stopTour(false);
+  tourMode = mode; tourStart = performance.now(); lastCameraUpdate = 0; setTourButtons(mode);
+  tourState.textContent = mode === "orbit" ? "Auto orbit running" : "Fly-through running";
+  tourRaf = requestAnimationFrame(tourStep);
+}
+function stopTour(update = true) {
+  if (tourRaf) cancelAnimationFrame(tourRaf);
+  tourRaf = null;
+  if (update) { setTourButtons(null); tourState.textContent = "Camera tour stopped"; }
+}
+function stopTourByUser() { userInteracted = true; stopTour(); }
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function tourStep(now) {
+  if (!rawData || userInteracted) { stopTour(); return; }
+  if (now - lastCameraUpdate < 32) { tourRaf = requestAnimationFrame(tourStep); return; }
+  lastCameraUpdate = now;
+  const t = (now - tourStart) / 1000;
+  let pos;
+  if (tourMode === "fly") {
+    const points = [
+      { x: 0.0, y: -1.15, z: 0.55 },
+      { x: 1.05, y: -0.55, z: 0.45 },
+      { x: 1.10, y: 0.75, z: 0.70 },
+      { x: -0.20, y: 1.25, z: 0.38 },
+      { x: -1.25, y: 0.20, z: 0.82 },
+      { x: -0.55, y: -1.05, z: 0.50 }
+    ];
+    const duration = 7.0;
+    const segment = Math.floor(t / duration) % points.length;
+    const next = (segment + 1) % points.length;
+    const u = smoothstep((t % duration) / duration);
+    const a = points[segment], b = points[next];
+    pos = { x: tourCenter.x + lerp(a.x, b.x, u) * tourRadius, y: tourCenter.y + lerp(a.y, b.y, u) * tourRadius, z: tourCenter.z + lerp(a.z, b.z, u) * tourRadius };
+  } else {
+    const a = t * 0.18;
+    pos = {
+      x: tourCenter.x + Math.cos(a) * tourRadius,
+      y: tourCenter.y + Math.sin(a) * tourRadius * 0.72,
+      z: tourCenter.z + (0.48 + 0.18 * Math.sin(a * 0.43)) * tourRadius
+    };
+  }
+  Graph.cameraPosition(pos, tourCenter, 0);
+  tourRaf = requestAnimationFrame(tourStep);
+}
+
+Graph.onNodeClick(node => {
+  stopTourByUser(); clickedNode = clickedNode === node ? null : node; refreshGraphStyle();
+  if (clickedNode) {
+    const distance = 260;
+    const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
+    Graph.cameraPosition({ x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio }, node, 700);
+  }
+});
+document.getElementById("graph").addEventListener("pointerdown", () => stopTourByUser(), { passive: true });
+document.getElementById("ui").addEventListener("pointerdown", event => { if (!event.target.closest("[data-keep-tour]")) stopTourByUser(); }, { passive: true });
+
+function setPrintMode(value) { isPrint = value; document.body.classList.toggle("print-mode", isPrint); document.getElementById("printBtn").textContent = isPrint ? "Normal mode" : "Print mode"; refreshGraphStyle(); }
+
+document.getElementById("geometryButtons").onclick = e => { const b = e.target.closest("button[data-geometry]"); if (b && !b.disabled) setGeometry(b.dataset.geometry); };
+document.getElementById("viewButtons").onclick = e => { const b = e.target.closest("button[data-view]"); if (b && !b.disabled) setView(b.dataset.view); };
+document.getElementById("colorButtons").onclick = e => { const b = e.target.closest("button[data-color]"); if (b && !b.disabled) setColor(b.dataset.color); };
+document.getElementById("edgeButtons").onclick = e => { const b = e.target.closest("button[data-edge]"); if (b && !b.disabled) setEdge(b.dataset.edge); };
+document.getElementById("labelButtons").onclick = e => { const b = e.target.closest("button[data-label]"); if (b && !b.disabled) setLabel(b.dataset.label); };
+
+document.getElementById("camOrbit").onclick = () => startTour("orbit", true);
+document.getElementById("camFly").onclick = () => startTour("fly", true);
+document.getElementById("camStop").onclick = () => { userInteracted = true; stopTour(); };
+document.getElementById("camFit").onclick = () => { stopTourByUser(); Graph.zoomToFit(800, 45); };
+document.getElementById("camFront").onclick = () => { stopTourByUser(); Graph.cameraPosition({ x: tourCenter.x, y: tourCenter.y, z: tourCenter.z + tourRadius * 1.35 }, tourCenter, 800); };
+document.getElementById("camSide").onclick = () => { stopTourByUser(); Graph.cameraPosition({ x: tourCenter.x + tourRadius * 1.35, y: tourCenter.y, z: tourCenter.z + tourRadius * 0.15 }, tourCenter, 800); };
+document.getElementById("camDiag").onclick = () => { stopTourByUser(); Graph.cameraPosition({ x: tourCenter.x + tourRadius, y: tourCenter.y + tourRadius * 0.8, z: tourCenter.z + tourRadius * 0.7 }, tourCenter, 800); };
+document.getElementById("printBtn").onclick = () => { stopTourByUser(); setPrintMode(!isPrint); };
+
+document.getElementById("fileInput").onchange = event => {
+  const file = event.target.files[0]; if (!file) return;
+  stopTourByUser(); setProgress(0, "file selected");
+  const reader = new FileReader();
+  reader.onprogress = event => { if (event.lengthComputable) setProgress((event.loaded / event.total) * 35, "reading file"); else setProgress(10, "reading file"); };
+  reader.onerror = () => { setProgress(0, "read error"); logInfo("Could not read the selected file."); };
+  reader.onload = async e => {
+    try { setProgress(40, "parsing JSON"); await processLoadedData(JSON.parse(e.target.result), file.name); }
+    catch (error) { setProgress(0, "error"); logInfo(`Could not load JSON:\n${error.message || error}`); }
+  };
+  reader.readAsText(file);
+};
+
+window.addEventListener("resize", () => { Graph.width(window.innerWidth); Graph.height(window.innerHeight); });
+loadDefaultData();
+</script>
+</body>
+</html>
