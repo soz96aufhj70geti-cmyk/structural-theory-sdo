@@ -17,3 +17,14 @@ index.html
 coupling_graph_data.json
 coupling_graph_preview.png
 ```
+
+## Paper
+
+The current manuscript is archived on Zenodo:
+
+[Read the paper on Zenodo](https://doi.org/10.5281/zenodo.20333058)
+
+Citation:
+
+```text
+Jung, H. (2026). Strukturtheorie der Wirklichkeit (v1.0). Zenodo. https://doi.org/10.5281/zenodo.20333058
